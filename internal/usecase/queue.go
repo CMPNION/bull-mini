@@ -28,6 +28,10 @@ type JobOptions struct {
 	MaxAttempts int
 	Delay       time.Duration
 	Backoff     time.Duration
+	RetryType   string
+	RetryFactor float64
+	RetryMax    time.Duration
+	RetryJitter bool
 }
 
 type JobOption func(*JobOptions)
@@ -56,6 +60,16 @@ func WithBackoff(d time.Duration) JobOption {
 	}
 }
 
+func WithExponentialBackoff(initial, max time.Duration, factor float64, jitter bool) JobOption {
+	return func(o *JobOptions) {
+		o.Backoff = initial
+		o.RetryType = "exponential"
+		o.RetryMax = max
+		o.RetryFactor = factor
+		o.RetryJitter = jitter
+	}
+}
+
 func (q *Queue[T]) Add(ctx context.Context, jobName string, data T, opts ...JobOption) (*domain.Job[T], error) {
 	options := JobOptions{
 		MaxAttempts: 1,
@@ -70,6 +84,10 @@ func (q *Queue[T]) Add(ctx context.Context, jobName string, data T, opts ...JobO
 
 	job := domain.NewJob(options.JobID, jobName, data, options.MaxAttempts)
 	job.Backoff = options.Backoff
+	job.RetryType = options.RetryType
+	job.RetryFactor = options.RetryFactor
+	job.RetryMax = options.RetryMax
+	job.RetryJitter = options.RetryJitter
 	if options.Delay > 0 {
 		job.State = domain.StateDelayed
 		executeAt := time.Now().Add(options.Delay)

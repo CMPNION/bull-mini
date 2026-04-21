@@ -18,7 +18,7 @@ I built this library using **Clean Architecture** principles to ensure it is hig
 
 - **Redis-Backed**: Uses Redis hashes and lists for fast, atomic job state management.
 - **Concurrent Processing**: Run multiple jobs in parallel using Go's lightweight goroutines.
-- **Automatic Retries**: Easily configure max attempts for jobs that might fail (e.g., network requests).
+- **Automatic Retries & Backoff**: Easily configure max attempts, fixed backoff, or Exponential Backoff with Jitter for failing jobs.
 - **Clean Architecture**: Domain, Use Case, and Infrastructure layers are strictly separated.
 - **Developer Friendly**: Simple, expressive API that feels natural to write.
 
@@ -127,6 +127,9 @@ The `Queue` is responsible for adding tasks to Redis.
 **Job Options:**
 - `bullmini.WithMaxAttempts(n)`: Sets the number of retries before the job is marked as `failed`.
 - `bullmini.WithJobID(id)`: Allows you to specify a custom, deterministic Job ID instead of a random UUID.
+- `bullmini.WithDelay(duration)`: Delays the execution of the job by the specified duration.
+- `bullmini.WithBackoff(duration)`: Sets a fixed delay between retries if the job fails.
+- `bullmini.WithExponentialBackoff(initialDelay, maxDelay, factor, jitter)`: Uses an exponential backoff strategy for retries.
 
 ### Worker
 

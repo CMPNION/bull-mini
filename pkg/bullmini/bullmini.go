@@ -56,3 +56,7 @@ func WithDelay(d time.Duration) JobOption {
 func WithBackoff(d time.Duration) JobOption {
 	return usecase.WithBackoff(d)
 }
+
+func WithExponentialBackoff(initial, max time.Duration, factor float64, jitter bool) JobOption {
+	return usecase.WithExponentialBackoff(initial, max, factor, jitter)
+}

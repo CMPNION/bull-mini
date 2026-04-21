@@ -25,6 +25,10 @@ type Job[T any] struct {
 	Attempts    int           `json:"attempts"`
 	MaxAttempts int           `json:"max_attempts"`
 	Backoff     time.Duration `json:"backoff,omitempty"`
+	RetryType   string        `json:"retry_type,omitempty"`
+	RetryFactor float64       `json:"retry_factor,omitempty"`
+	RetryMax    time.Duration `json:"retry_max,omitempty"`
+	RetryJitter bool          `json:"retry_jitter,omitempty"`
 	Progress    int           `json:"progress"`
 	Error       string        `json:"error,omitempty"`
 	WorkerID    string        `json:"worker_id,omitempty"`
@@ -77,9 +81,18 @@ func (j *Job[T]) CanRetry() bool {
 }
 
 func (j *Job[T]) PrepareRetry() {
-	if j.Backoff > 0 {
+	var delay time.Duration
+
+	if j.RetryType == "exponential" {
+		policy := NewExponentialRetryPolicy(j.Backoff, j.RetryMax, j.RetryFactor, j.RetryJitter)
+		delay = policy.NextDelay(j.Attempts)
+	} else if j.Backoff > 0 {
+		delay = j.Backoff
+	}
+
+	if delay > 0 {
 		j.State = StateDelayed
-		executeAt := time.Now().Add(j.Backoff)
+		executeAt := time.Now().Add(delay)
 		j.ExecuteAt = &executeAt
 	} else {
 		j.State = StateWaiting
