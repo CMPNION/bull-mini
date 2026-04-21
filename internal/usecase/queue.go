@@ -9,13 +9,13 @@ import (
 	"github.com/CMPNION/bull-mini/internal/domain"
 )
 
-type Queue struct {
+type Queue[T any] struct {
 	name string
-	repo domain.QueueRepository
+	repo domain.QueueRepository[T]
 }
 
-func NewQueue(name string, repo domain.QueueRepository) *Queue {
-	return &Queue{
+func NewQueue[T any](name string, repo domain.QueueRepository[T]) *Queue[T] {
+	return &Queue[T]{
 		name: name,
 		repo: repo,
 	}
@@ -40,7 +40,7 @@ func WithMaxAttempts(attempts int) JobOption {
 	}
 }
 
-func (q *Queue) Add(ctx context.Context, jobName string, data map[string]any, opts ...JobOption) (*domain.Job, error) {
+func (q *Queue[T]) Add(ctx context.Context, jobName string, data T, opts ...JobOption) (*domain.Job[T], error) {
 	options := JobOptions{
 		MaxAttempts: 1,
 	}
@@ -62,11 +62,11 @@ func (q *Queue) Add(ctx context.Context, jobName string, data map[string]any, op
 	return job, nil
 }
 
-func (q *Queue) GetJob(ctx context.Context, jobID string) (*domain.Job, error) {
+func (q *Queue[T]) GetJob(ctx context.Context, jobID string) (*domain.Job[T], error) {
 	return q.repo.GetJob(ctx, q.name, jobID)
 }
 
-func (q *Queue) Name() string {
+func (q *Queue[T]) Name() string {
 	return q.name
 }
 

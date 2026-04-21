@@ -7,28 +7,28 @@ import (
 	redisclient "github.com/redis/go-redis/v9"
 )
 
-type Job = domain.Job
+type Job[T any] = domain.Job[T]
 
-type Queue = usecase.Queue
+type Queue[T any] = usecase.Queue[T]
 
-type Worker = usecase.Worker
+type Worker[T any] = usecase.Worker[T]
 
-type Processor = usecase.Processor
+type Processor[T any] = usecase.Processor[T]
 
 type JobOption = usecase.JobOption
 
 type WorkerOption = usecase.WorkerOption
 
-func NewQueue(name string, redisOpts *redisclient.Options) *Queue {
+func NewQueue[T any](name string, redisOpts *redisclient.Options) *Queue[T] {
 	client := redis.NewRedisClient(redisOpts)
-	repo := redis.NewRedisQueueRepository(client, "bullmini")
-	return usecase.NewQueue(name, repo)
+	repo := redis.NewRedisQueueRepository[T](client, "bullmini")
+	return usecase.NewQueue[T](name, repo)
 }
 
-func NewWorker(queueName string, redisOpts *redisclient.Options, processor Processor, opts ...WorkerOption) *Worker {
+func NewWorker[T any](queueName string, redisOpts *redisclient.Options, processor Processor[T], opts ...WorkerOption) *Worker[T] {
 	client := redis.NewRedisClient(redisOpts)
-	repo := redis.NewRedisQueueRepository(client, "bullmini")
-	return usecase.NewWorker(queueName, repo, processor, opts...)
+	repo := redis.NewRedisQueueRepository[T](client, "bullmini")
+	return usecase.NewWorker[T](queueName, repo, processor, opts...)
 }
 
 func WithConcurrency(concurrency int) WorkerOption {

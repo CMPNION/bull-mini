@@ -2,18 +2,21 @@ package usecase
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"sync"
 	"time"
 
 	"github.com/CMPNION/bull-mini/internal/domain"
 )
 
-type Processor func(ctx context.Context, job *domain.Job) error
+type Processor[T any] func(ctx context.Context, job *domain.Job[T]) error
 
-type Worker struct {
+type Worker[T any] struct {
 	queueName   string
-	repo        domain.QueueRepository
-	processor   Processor
+	workerID    string
+	repo        domain.QueueRepository[T]
+	processor   Processor[T]
 	concurrency int
 
 	cancel context.CancelFunc
@@ -34,7 +37,7 @@ func WithConcurrency(concurrency int) WorkerOption {
 	}
 }
 
-func NewWorker(queueName string, repo domain.QueueRepository, processor Processor, opts ...WorkerOption) *Worker {
+func NewWorker[T any](queueName string, repo domain.QueueRepository[T], processor Processor[T], opts ...WorkerOption) *Worker[T] {
 	options := WorkerOptions{
 		Concurrency: 1,
 	}
@@ -42,15 +45,16 @@ func NewWorker(queueName string, repo domain.QueueRepository, processor Processo
 		opt(&options)
 	}
 
-	return &Worker{
+	return &Worker[T]{
 		queueName:   queueName,
+		workerID:    generateWorkerID(),
 		repo:        repo,
 		processor:   processor,
 		concurrency: options.Concurrency,
 	}
 }
 
-func (w *Worker) Start(ctx context.Context) {
+func (w *Worker[T]) Start(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	w.cancel = cancel
 
@@ -60,14 +64,14 @@ func (w *Worker) Start(ctx context.Context) {
 	}
 }
 
-func (w *Worker) Stop() {
+func (w *Worker[T]) Stop() {
 	if w.cancel != nil {
 		w.cancel()
 	}
 	w.wg.Wait()
 }
 
-func (w *Worker) loop(ctx context.Context) {
+func (w *Worker[T]) loop(ctx context.Context) {
 	defer w.wg.Done()
 
 	for {
@@ -75,7 +79,7 @@ func (w *Worker) loop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			job, err := w.repo.Dequeue(ctx, w.queueName)
+			job, err := w.repo.Dequeue(ctx, w.queueName, w.workerID)
 			if err != nil || job == nil {
 				select {
 				case <-time.After(time.Second):
@@ -90,8 +94,8 @@ func (w *Worker) loop(ctx context.Context) {
 	}
 }
 
-func (w *Worker) processJob(ctx context.Context, job *domain.Job) {
-	job.MarkActive()
+func (w *Worker[T]) processJob(ctx context.Context, job *domain.Job[T]) {
+	job.MarkActive(w.workerID)
 	_ = w.repo.Update(ctx, w.queueName, job)
 
 	err := w.processor(ctx, job)
@@ -110,4 +114,12 @@ func (w *Worker) processJob(ctx context.Context, job *domain.Job) {
 		job.MarkCompleted()
 		_ = w.repo.Update(ctx, w.queueName, job)
 	}
+
+	_ = w.repo.Acknowledge(ctx, w.queueName, w.workerID, job.ID)
+}
+
+func generateWorkerID() string {
+	b := make([]byte, 12)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }

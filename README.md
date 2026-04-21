@@ -52,6 +52,12 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// Define a payload struct for type safety
+type EmailPayload struct {
+	UserID string `json:"userID"`
+	Email  string `json:"email"`
+}
+
 func main() {
 	ctx := context.Background()
 
@@ -60,13 +66,13 @@ func main() {
 		Addr: "localhost:6379",
 	}
 
-	// 2. Initialize a Queue
-	queue := bullmini.NewQueue("email-queue", redisOpts)
+	// 2. Initialize a Queue with the generic payload type
+	queue := bullmini.NewQueue[EmailPayload]("email-queue", redisOpts)
 
 	// 3. Add a job to the queue
-	job, err := queue.Add(ctx, "send-welcome-email", map[string]any{
-		"userID": "12345",
-		"email":  "newuser@example.com",
+	job, err := queue.Add(ctx, "send-welcome-email", EmailPayload{
+		UserID: "12345",
+		Email:  "newuser@example.com",
 	}, bullmini.WithMaxAttempts(3)) // Automatically retry up to 3 times if it fails
 
 	if err != nil {
@@ -75,9 +81,8 @@ func main() {
 	fmt.Printf("Added job with ID: %s\n", job.ID)
 
 	// 4. Define your job processing logic
-	processor := func(ctx context.Context, j *bullmini.Job) error {
-		email := j.Data["email"].(string)
-		fmt.Printf("Processing job %s: Sending email to %s...\n", j.Name, email)
+	processor := func(ctx context.Context, j *bullmini.Job[EmailPayload]) error {
+		fmt.Printf("Processing job %s: Sending email to %s...\n", j.Name, j.Data.Email)
 		
 		// Simulate work
 		time.Sleep(2 * time.Second)
