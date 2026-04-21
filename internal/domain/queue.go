@@ -8,4 +8,5 @@ type QueueRepository[T any] interface {
 	Update(ctx context.Context, queueName string, job *Job[T]) error
 	GetJob(ctx context.Context, queueName, jobID string) (*Job[T], error)
 	Acknowledge(ctx context.Context, queueName, workerID, jobID string) error
+	PromoteDelayed(ctx context.Context, queueName string) error
 }

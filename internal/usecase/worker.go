@@ -58,6 +58,9 @@ func (w *Worker[T]) Start(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	w.cancel = cancel
 
+	w.wg.Add(1)
+	go w.schedulerLoop(ctx)
+
 	for i := 0; i < w.concurrency; i++ {
 		w.wg.Add(1)
 		go w.loop(ctx)
@@ -69,6 +72,21 @@ func (w *Worker[T]) Stop() {
 		w.cancel()
 	}
 	w.wg.Wait()
+}
+
+func (w *Worker[T]) schedulerLoop(ctx context.Context) {
+	defer w.wg.Done()
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_ = w.repo.PromoteDelayed(ctx, w.queueName)
+		}
+	}
 }
 
 func (w *Worker[T]) loop(ctx context.Context) {

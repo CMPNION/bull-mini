@@ -1,6 +1,8 @@
 package bullmini
 
 import (
+	"time"
+
 	"github.com/CMPNION/bull-mini/internal/domain"
 	"github.com/CMPNION/bull-mini/internal/infrastructure/redis"
 	"github.com/CMPNION/bull-mini/internal/usecase"
@@ -41,4 +43,8 @@ func WithJobID(id string) JobOption {
 
 func WithMaxAttempts(attempts int) JobOption {
 	return usecase.WithMaxAttempts(attempts)
+}
+
+func WithDelay(d time.Duration) JobOption {
+	return usecase.WithDelay(d)
 }

@@ -49,6 +49,10 @@ func (r *RedisQueueRepository[T]) jobsKey(queueName string) string {
 	return fmt.Sprintf("%s:%s:jobs", r.prefix, queueName)
 }
 
+func (r *RedisQueueRepository[T]) delayedKey(queueName string) string {
+	return fmt.Sprintf("%s:%s:delayed", r.prefix, queueName)
+}
+
 func (r *RedisQueueRepository[T]) Enqueue(ctx context.Context, queueName string, job *domain.Job[T]) error {
 	data, err := r.serializer.Marshal(job)
 	if err != nil {
@@ -57,7 +61,15 @@ func (r *RedisQueueRepository[T]) Enqueue(ctx context.Context, queueName string,
 
 	pipe := r.client.Pipeline()
 	pipe.HSet(ctx, r.jobsKey(queueName), job.ID, data)
-	pipe.LPush(ctx, r.waitKey(queueName), job.ID)
+
+	if job.State == domain.StateDelayed && job.ExecuteAt != nil {
+		pipe.ZAdd(ctx, r.delayedKey(queueName), redis.Z{
+			Score:  float64(job.ExecuteAt.UnixMilli()),
+			Member: job.ID,
+		})
+	} else {
+		pipe.LPush(ctx, r.waitKey(queueName), job.ID)
+	}
 
 	_, err = pipe.Exec(ctx)
 	if err != nil {
@@ -115,5 +127,31 @@ func (r *RedisQueueRepository[T]) Acknowledge(ctx context.Context, queueName, wo
 	if err != nil {
 		return fmt.Errorf("failed to acknowledge job: %w", err)
 	}
+	return nil
+}
+
+func (r *RedisQueueRepository[T]) PromoteDelayed(ctx context.Context, queueName string) error {
+	now := float64(time.Now().UnixMilli())
+
+	script := `
+		local delayedKey = KEYS[1]
+		local waitKey = KEYS[2]
+		local now = ARGV[1]
+
+		local jobs = redis.call("ZRANGEBYSCORE", delayedKey, "-inf", now)
+		if #jobs > 0 then
+			for _, jobID in ipairs(jobs) do
+				redis.call("LPUSH", waitKey, jobID)
+				redis.call("ZREM", delayedKey, jobID)
+			end
+		end
+		return #jobs
+	`
+
+	err := r.client.Eval(ctx, script, []string{r.delayedKey(queueName), r.waitKey(queueName)}, now).Err()
+	if err != nil && err != redis.Nil {
+		return fmt.Errorf("failed to promote delayed jobs: %w", err)
+	}
+
 	return nil
 }

@@ -27,6 +27,7 @@ type Job[T any] struct {
 	Progress    int        `json:"progress"`
 	Error       string     `json:"error,omitempty"`
 	WorkerID    string     `json:"worker_id,omitempty"`
+	ExecuteAt   *time.Time `json:"execute_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
 	ProcessedAt *time.Time `json:"processed_at,omitempty"`
 	FinishedAt  *time.Time `json:"finished_at,omitempty"`
