@@ -24,14 +24,15 @@ func NewQueue[T any](name string, repo domain.QueueRepository[T]) *Queue[T] {
 }
 
 type JobOptions struct {
-	JobID       string
-	MaxAttempts int
-	Delay       time.Duration
-	Backoff     time.Duration
-	RetryType   string
-	RetryFactor float64
-	RetryMax    time.Duration
-	RetryJitter bool
+	JobID          string
+	IdempotencyKey string
+	MaxAttempts    int
+	Delay          time.Duration
+	Backoff        time.Duration
+	RetryType      string
+	RetryFactor    float64
+	RetryMax       time.Duration
+	RetryJitter    bool
 }
 
 type JobOption func(*JobOptions)
@@ -70,6 +71,12 @@ func WithExponentialBackoff(initial, max time.Duration, factor float64, jitter b
 	}
 }
 
+func WithIdempotencyKey(key string) JobOption {
+	return func(o *JobOptions) {
+		o.IdempotencyKey = key
+	}
+}
+
 func (q *Queue[T]) Add(ctx context.Context, jobName string, data T, opts ...JobOption) (*domain.Job[T], error) {
 	options := JobOptions{
 		MaxAttempts: 1,
@@ -83,6 +90,7 @@ func (q *Queue[T]) Add(ctx context.Context, jobName string, data T, opts ...JobO
 	}
 
 	job := domain.NewJob(options.JobID, jobName, data, options.MaxAttempts)
+	job.IdempotencyKey = options.IdempotencyKey
 	job.Backoff = options.Backoff
 	job.RetryType = options.RetryType
 	job.RetryFactor = options.RetryFactor

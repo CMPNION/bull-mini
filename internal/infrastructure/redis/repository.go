@@ -65,7 +65,21 @@ func (r *RedisQueueRepository[T]) failedKey(queueName string) string {
 	return fmt.Sprintf("%s:%s:failed", r.prefix, queueName)
 }
 
+func (r *RedisQueueRepository[T]) idempotencyKey(queueName, key string) string {
+	return fmt.Sprintf("%s:%s:idempotency:%s", r.prefix, queueName, key)
+}
+
 func (r *RedisQueueRepository[T]) Enqueue(ctx context.Context, queueName string, job *domain.Job[T]) error {
+	if job.IdempotencyKey != "" {
+		ok, err := r.client.SetNX(ctx, r.idempotencyKey(queueName, job.IdempotencyKey), job.ID, 24*time.Hour).Result()
+		if err != nil {
+			return fmt.Errorf("failed to check idempotency key: %w", err)
+		}
+		if !ok {
+			return domain.ErrDuplicateJob
+		}
+	}
+
 	data, err := r.serializer.Marshal(job)
 	if err != nil {
 		return fmt.Errorf("failed to marshal job: %w", err)

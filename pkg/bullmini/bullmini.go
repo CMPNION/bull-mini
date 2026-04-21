@@ -21,6 +21,8 @@ type JobOption = usecase.JobOption
 
 type WorkerOption = usecase.WorkerOption
 
+var ErrDuplicateJob = domain.ErrDuplicateJob
+
 func NewQueue[T any](name string, redisOpts *redisclient.Options) *Queue[T] {
 	client := redis.NewRedisClient(redisOpts)
 	repo := redis.NewRedisQueueRepository[T](client, "bullmini")
@@ -59,4 +61,8 @@ func WithBackoff(d time.Duration) JobOption {
 
 func WithExponentialBackoff(initial, max time.Duration, factor float64, jitter bool) JobOption {
 	return usecase.WithExponentialBackoff(initial, max, factor, jitter)
+}
+
+func WithIdempotencyKey(key string) JobOption {
+	return usecase.WithIdempotencyKey(key)
 }
