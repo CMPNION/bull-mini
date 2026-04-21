@@ -1,6 +1,9 @@
 package domain
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type QueueRepository[T any] interface {
 	Enqueue(ctx context.Context, queueName string, job *Job[T]) error
@@ -9,4 +12,6 @@ type QueueRepository[T any] interface {
 	GetJob(ctx context.Context, queueName, jobID string) (*Job[T], error)
 	Acknowledge(ctx context.Context, queueName, workerID, jobID string) error
 	PromoteDelayed(ctx context.Context, queueName string) error
+	Heartbeat(ctx context.Context, queueName, workerID string, timeout time.Duration) error
+	ReclaimStalled(ctx context.Context, queueName string, timeout time.Duration) error
 }

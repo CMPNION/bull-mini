@@ -53,6 +53,10 @@ func (r *RedisQueueRepository[T]) delayedKey(queueName string) string {
 	return fmt.Sprintf("%s:%s:delayed", r.prefix, queueName)
 }
 
+func (r *RedisQueueRepository[T]) heartbeatKey(queueName, workerID string) string {
+	return fmt.Sprintf("%s:%s:heartbeat:%s", r.prefix, queueName, workerID)
+}
+
 func (r *RedisQueueRepository[T]) completedKey(queueName string) string {
 	return fmt.Sprintf("%s:%s:completed", r.prefix, queueName)
 }
@@ -143,6 +147,43 @@ func (r *RedisQueueRepository[T]) Acknowledge(ctx context.Context, queueName, wo
 	err := r.client.LRem(ctx, r.activeKey(queueName, workerID), 1, jobID).Err()
 	if err != nil {
 		return fmt.Errorf("failed to acknowledge job: %w", err)
+	}
+	return nil
+}
+
+func (r *RedisQueueRepository[T]) Heartbeat(ctx context.Context, queueName, workerID string, timeout time.Duration) error {
+	return r.client.Set(ctx, r.heartbeatKey(queueName, workerID), "1", timeout).Err()
+}
+
+func (r *RedisQueueRepository[T]) ReclaimStalled(ctx context.Context, queueName string, timeout time.Duration) error {
+	match := fmt.Sprintf("%s:%s:active:*", r.prefix, queueName)
+	var cursor uint64
+	for {
+		var keys []string
+		var err error
+		keys, cursor, err = r.client.Scan(ctx, cursor, match, 10).Result()
+		if err != nil {
+			return err
+		}
+		for _, key := range keys {
+			workerID := key[len(fmt.Sprintf("%s:%s:active:", r.prefix, queueName)):]
+			heartbeatKey := r.heartbeatKey(queueName, workerID)
+
+			exists, err := r.client.Exists(ctx, heartbeatKey).Result()
+			if err != nil || exists > 0 {
+				continue
+			}
+
+			for {
+				jobID, err := r.client.LMove(ctx, key, r.waitKey(queueName), "RIGHT", "LEFT").Result()
+				if err != nil || jobID == "" {
+					break
+				}
+			}
+		}
+		if cursor == 0 {
+			break
+		}
 	}
 	return nil
 }

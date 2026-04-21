@@ -37,6 +37,10 @@ func WithConcurrency(concurrency int) WorkerOption {
 	return usecase.WithConcurrency(concurrency)
 }
 
+func WithVisibilityTimeout(timeout time.Duration) WorkerOption {
+	return usecase.WithVisibilityTimeout(timeout)
+}
+
 func WithJobID(id string) JobOption {
 	return usecase.WithJobID(id)
 }
