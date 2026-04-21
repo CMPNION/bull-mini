@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/CMPNION/bull-mini/internal/domain"
+	"github.com/CMPNION/bull-mini/internal/infrastructure/memory"
 	"github.com/CMPNION/bull-mini/internal/infrastructure/redis"
 	"github.com/CMPNION/bull-mini/internal/usecase"
 	redisclient "github.com/redis/go-redis/v9"
@@ -33,6 +34,18 @@ func NewWorker[T any](queueName string, redisOpts *redisclient.Options, processo
 	client := redis.NewRedisClient(redisOpts)
 	repo := redis.NewRedisQueueRepository[T](client, "bullmini")
 	return usecase.NewWorker[T](queueName, repo, processor, opts...)
+}
+
+func NewQueueWithRepo[T any](name string, repo domain.QueueRepository[T]) *Queue[T] {
+	return usecase.NewQueue[T](name, repo)
+}
+
+func NewWorkerWithRepo[T any](queueName string, repo domain.QueueRepository[T], processor Processor[T], opts ...WorkerOption) *Worker[T] {
+	return usecase.NewWorker[T](queueName, repo, processor, opts...)
+}
+
+func NewMemoryQueueRepository[T any]() domain.QueueRepository[T] {
+	return memory.NewMemoryQueueRepository[T]()
 }
 
 func WithConcurrency(concurrency int) WorkerOption {
