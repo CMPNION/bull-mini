@@ -27,6 +27,7 @@ type JobOptions struct {
 	JobID       string
 	MaxAttempts int
 	Delay       time.Duration
+	Backoff     time.Duration
 }
 
 type JobOption func(*JobOptions)
@@ -49,6 +50,12 @@ func WithDelay(d time.Duration) JobOption {
 	}
 }
 
+func WithBackoff(d time.Duration) JobOption {
+	return func(o *JobOptions) {
+		o.Backoff = d
+	}
+}
+
 func (q *Queue[T]) Add(ctx context.Context, jobName string, data T, opts ...JobOption) (*domain.Job[T], error) {
 	options := JobOptions{
 		MaxAttempts: 1,
@@ -62,6 +69,7 @@ func (q *Queue[T]) Add(ctx context.Context, jobName string, data T, opts ...JobO
 	}
 
 	job := domain.NewJob(options.JobID, jobName, data, options.MaxAttempts)
+	job.Backoff = options.Backoff
 	if options.Delay > 0 {
 		job.State = domain.StateDelayed
 		executeAt := time.Now().Add(options.Delay)

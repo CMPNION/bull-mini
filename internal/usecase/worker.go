@@ -122,7 +122,7 @@ func (w *Worker[T]) processJob(ctx context.Context, job *domain.Job[T]) {
 		job.MarkFailed(err)
 
 		if job.CanRetry() {
-			job.State = domain.StateWaiting
+			job.PrepareRetry()
 			_ = w.repo.Update(ctx, w.queueName, job)
 			_ = w.repo.Enqueue(ctx, w.queueName, job)
 		} else {

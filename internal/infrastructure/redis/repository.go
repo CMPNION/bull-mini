@@ -53,6 +53,14 @@ func (r *RedisQueueRepository[T]) delayedKey(queueName string) string {
 	return fmt.Sprintf("%s:%s:delayed", r.prefix, queueName)
 }
 
+func (r *RedisQueueRepository[T]) completedKey(queueName string) string {
+	return fmt.Sprintf("%s:%s:completed", r.prefix, queueName)
+}
+
+func (r *RedisQueueRepository[T]) failedKey(queueName string) string {
+	return fmt.Sprintf("%s:%s:failed", r.prefix, queueName)
+}
+
 func (r *RedisQueueRepository[T]) Enqueue(ctx context.Context, queueName string, job *domain.Job[T]) error {
 	data, err := r.serializer.Marshal(job)
 	if err != nil {
@@ -97,7 +105,16 @@ func (r *RedisQueueRepository[T]) Update(ctx context.Context, queueName string, 
 		return fmt.Errorf("failed to marshal job: %w", err)
 	}
 
-	err = r.client.HSet(ctx, r.jobsKey(queueName), job.ID, data).Err()
+	pipe := r.client.Pipeline()
+	pipe.HSet(ctx, r.jobsKey(queueName), job.ID, data)
+
+	if job.State == domain.StateCompleted {
+		pipe.SAdd(ctx, r.completedKey(queueName), job.ID)
+	} else if job.State == domain.StateFailed {
+		pipe.SAdd(ctx, r.failedKey(queueName), job.ID)
+	}
+
+	_, err = pipe.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to update job: %w", err)
 	}

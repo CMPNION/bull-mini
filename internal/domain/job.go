@@ -18,19 +18,20 @@ type Serializer interface {
 }
 
 type Job[T any] struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Data        T          `json:"data"`
-	State       JobState   `json:"state"`
-	Attempts    int        `json:"attempts"`
-	MaxAttempts int        `json:"max_attempts"`
-	Progress    int        `json:"progress"`
-	Error       string     `json:"error,omitempty"`
-	WorkerID    string     `json:"worker_id,omitempty"`
-	ExecuteAt   *time.Time `json:"execute_at,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
-	ProcessedAt *time.Time `json:"processed_at,omitempty"`
-	FinishedAt  *time.Time `json:"finished_at,omitempty"`
+	ID          string        `json:"id"`
+	Name        string        `json:"name"`
+	Data        T             `json:"data"`
+	State       JobState      `json:"state"`
+	Attempts    int           `json:"attempts"`
+	MaxAttempts int           `json:"max_attempts"`
+	Backoff     time.Duration `json:"backoff,omitempty"`
+	Progress    int           `json:"progress"`
+	Error       string        `json:"error,omitempty"`
+	WorkerID    string        `json:"worker_id,omitempty"`
+	ExecuteAt   *time.Time    `json:"execute_at,omitempty"`
+	CreatedAt   time.Time     `json:"created_at"`
+	ProcessedAt *time.Time    `json:"processed_at,omitempty"`
+	FinishedAt  *time.Time    `json:"finished_at,omitempty"`
 }
 
 func NewJob[T any](id, name string, data T, maxAttempts int) *Job[T] {
@@ -73,4 +74,15 @@ func (j *Job[T]) MarkFailed(err error) {
 
 func (j *Job[T]) CanRetry() bool {
 	return j.Attempts < j.MaxAttempts
+}
+
+func (j *Job[T]) PrepareRetry() {
+	if j.Backoff > 0 {
+		j.State = StateDelayed
+		executeAt := time.Now().Add(j.Backoff)
+		j.ExecuteAt = &executeAt
+	} else {
+		j.State = StateWaiting
+		j.ExecuteAt = nil
+	}
 }

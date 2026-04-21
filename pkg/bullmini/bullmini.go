@@ -48,3 +48,7 @@ func WithMaxAttempts(attempts int) JobOption {
 func WithDelay(d time.Duration) JobOption {
 	return usecase.WithDelay(d)
 }
+
+func WithBackoff(d time.Duration) JobOption {
+	return usecase.WithBackoff(d)
+}
