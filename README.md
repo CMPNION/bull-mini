@@ -4,6 +4,16 @@
 
 I built this library using **Clean Architecture** principles to ensure it is highly decoupled, easy to test, and simple to integrate into any Go microservice. If you need a reliable way to process background tasks, send emails, or handle delayed jobs without pulling in a massive framework, you're in the right place!
 
+## 📑 Table of Contents
+
+- [✨ Features](#-features)
+- [📦 Installation](#-installation)
+- [🚀 Quick Start](#-quick-start)
+- [🛠️ API Overview](#️-api-overview)
+- [🏗️ Architecture](#️-architecture)
+- [🤝 Contributing](#-contributing)
+- [📝 License](#-license)
+
 ## ✨ Features
 
 - **Redis-Backed**: Uses Redis hashes and lists for fast, atomic job state management.
