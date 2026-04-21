@@ -12,6 +12,12 @@ import (
 
 type Processor[T any] func(ctx context.Context, job *domain.Job[T]) error
 
+type WorkerHooks[T any] struct {
+	BeforeProcess func(ctx context.Context, job *domain.Job[T])
+	AfterProcess  func(ctx context.Context, job *domain.Job[T], err error)
+	OnRetry       func(ctx context.Context, job *domain.Job[T], err error)
+}
+
 type Worker[T any] struct {
 	queueName         string
 	workerID          string
@@ -19,36 +25,44 @@ type Worker[T any] struct {
 	processor         Processor[T]
 	concurrency       int
 	visibilityTimeout time.Duration
+	hooks             WorkerHooks[T]
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
 
-type WorkerOptions struct {
+type WorkerOptions[T any] struct {
 	Concurrency       int
 	VisibilityTimeout time.Duration
+	Hooks             WorkerHooks[T]
 }
 
-type WorkerOption func(*WorkerOptions)
+type WorkerOption[T any] func(*WorkerOptions[T])
 
-func WithConcurrency(concurrency int) WorkerOption {
-	return func(o *WorkerOptions) {
+func WithConcurrency[T any](concurrency int) WorkerOption[T] {
+	return func(o *WorkerOptions[T]) {
 		if concurrency > 0 {
 			o.Concurrency = concurrency
 		}
 	}
 }
 
-func WithVisibilityTimeout(timeout time.Duration) WorkerOption {
-	return func(o *WorkerOptions) {
+func WithVisibilityTimeout[T any](timeout time.Duration) WorkerOption[T] {
+	return func(o *WorkerOptions[T]) {
 		if timeout > 0 {
 			o.VisibilityTimeout = timeout
 		}
 	}
 }
 
-func NewWorker[T any](queueName string, repo domain.QueueRepository[T], processor Processor[T], opts ...WorkerOption) *Worker[T] {
-	options := WorkerOptions{
+func WithHooks[T any](hooks WorkerHooks[T]) WorkerOption[T] {
+	return func(o *WorkerOptions[T]) {
+		o.Hooks = hooks
+	}
+}
+
+func NewWorker[T any](queueName string, repo domain.QueueRepository[T], processor Processor[T], opts ...WorkerOption[T]) *Worker[T] {
+	options := WorkerOptions[T]{
 		Concurrency:       1,
 		VisibilityTimeout: 5 * time.Minute,
 	}
@@ -63,6 +77,7 @@ func NewWorker[T any](queueName string, repo domain.QueueRepository[T], processo
 		processor:         processor,
 		concurrency:       options.Concurrency,
 		visibilityTimeout: options.VisibilityTimeout,
+		hooks:             options.Hooks,
 	}
 }
 
@@ -166,12 +181,23 @@ func (w *Worker[T]) processJob(ctx context.Context, job *domain.Job[T]) {
 	job.MarkActive(w.workerID)
 	_ = w.repo.Update(ctx, w.queueName, job)
 
+	if w.hooks.BeforeProcess != nil {
+		w.hooks.BeforeProcess(ctx, job)
+	}
+
 	err := w.processor(ctx, job)
+
+	if w.hooks.AfterProcess != nil {
+		w.hooks.AfterProcess(ctx, job, err)
+	}
 
 	if err != nil {
 		job.MarkFailed(err)
 
 		if job.CanRetry() {
+			if w.hooks.OnRetry != nil {
+				w.hooks.OnRetry(ctx, job, err)
+			}
 			job.PrepareRetry()
 			_ = w.repo.Update(ctx, w.queueName, job)
 			_ = w.repo.Enqueue(ctx, w.queueName, job)

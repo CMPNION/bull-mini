@@ -20,7 +20,9 @@ type Processor[T any] = usecase.Processor[T]
 
 type JobOption = usecase.JobOption
 
-type WorkerOption = usecase.WorkerOption
+type WorkerHooks[T any] = usecase.WorkerHooks[T]
+
+type WorkerOption[T any] = usecase.WorkerOption[T]
 
 var ErrDuplicateJob = domain.ErrDuplicateJob
 
@@ -30,7 +32,7 @@ func NewQueue[T any](name string, redisOpts *redisclient.Options) *Queue[T] {
 	return usecase.NewQueue[T](name, repo)
 }
 
-func NewWorker[T any](queueName string, redisOpts *redisclient.Options, processor Processor[T], opts ...WorkerOption) *Worker[T] {
+func NewWorker[T any](queueName string, redisOpts *redisclient.Options, processor Processor[T], opts ...WorkerOption[T]) *Worker[T] {
 	client := redis.NewRedisClient(redisOpts)
 	repo := redis.NewRedisQueueRepository[T](client, "bullmini")
 	return usecase.NewWorker[T](queueName, repo, processor, opts...)
@@ -40,7 +42,7 @@ func NewQueueWithRepo[T any](name string, repo domain.QueueRepository[T]) *Queue
 	return usecase.NewQueue[T](name, repo)
 }
 
-func NewWorkerWithRepo[T any](queueName string, repo domain.QueueRepository[T], processor Processor[T], opts ...WorkerOption) *Worker[T] {
+func NewWorkerWithRepo[T any](queueName string, repo domain.QueueRepository[T], processor Processor[T], opts ...WorkerOption[T]) *Worker[T] {
 	return usecase.NewWorker[T](queueName, repo, processor, opts...)
 }
 
@@ -48,12 +50,16 @@ func NewMemoryQueueRepository[T any]() domain.QueueRepository[T] {
 	return memory.NewMemoryQueueRepository[T]()
 }
 
-func WithConcurrency(concurrency int) WorkerOption {
-	return usecase.WithConcurrency(concurrency)
+func WithConcurrency[T any](concurrency int) WorkerOption[T] {
+	return usecase.WithConcurrency[T](concurrency)
 }
 
-func WithVisibilityTimeout(timeout time.Duration) WorkerOption {
-	return usecase.WithVisibilityTimeout(timeout)
+func WithVisibilityTimeout[T any](timeout time.Duration) WorkerOption[T] {
+	return usecase.WithVisibilityTimeout[T](timeout)
+}
+
+func WithHooks[T any](hooks WorkerHooks[T]) WorkerOption[T] {
+	return usecase.WithHooks(hooks)
 }
 
 func WithJobID(id string) JobOption {

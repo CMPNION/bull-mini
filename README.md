@@ -97,7 +97,7 @@ func main() {
 		"email-queue", 
 		redisOpts, 
 		processor,
-		bullmini.WithConcurrency(5), // Process up to 5 jobs simultaneously
+		bullmini.WithConcurrency[EmailPayload](5), // Process up to 5 jobs simultaneously
 	)
 
 	fmt.Println("Worker is starting...")
