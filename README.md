@@ -1,236 +1,287 @@
-# 🎉Announce🎉
-In a few weeks I will drop a new release — and it will bring native NATS support to bull-mini.
+# 🔗 queue-wrap
 
-This means you’ll be able to plug NATS in as a transport layer for job distribution, unlock event-driven workflows, and scale your queues across services with much lower overhead and better decoupling.
-
-More details coming soon — including architecture notes, migration guide, and examples.
-
-# 🐂 bull-mini
-
-[![Go Reference](https://pkg.go.dev/badge/github.com/CMPNION/bull-mini.svg)](https://pkg.go.dev/github.com/CMPNION/bull-mini)
+[![Go Reference](https://pkg.go.dev/badge/github.com/CMPNION/queue-wrap.svg)](https://pkg.go.dev/github.com/CMPNION/queue-wrap)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-**bull-mini** is an enterprise-grade, strictly typed, and highly reliable Redis-backed background job queue for Go.
+**queue-wrap** is an enterprise-grade, strictly typed, and highly reliable distributed job queue for Go. Built with **Clean Architecture** principles and leveraging **Go 1.18+ Generics**, it provides a robust foundation for distributed task processing, delayed execution, and background worker orchestration.
 
-Engineered with **Clean Architecture** principles and leveraging **Go 1.18+ Generics**, `bull-mini` provides a robust foundation for distributed task processing, delayed execution, and background worker orchestration without sacrificing developer experience or type safety.
+Out of the box, it's powered by **Redis**. Extensible **transport layer** allows seamless integration with **NATS**, **RabbitMQ**, **Kafka**, and other messaging systems.
 
-## 📑 Table of Contents
+## 🎯 What's Inside
 
-- [✨ Enterprise Features](#-enterprise-features)
-- [📦 Installation](#-installation)
-- [🚀 Quick Start](#-quick-start)
-- [📚 Comprehensive Documentation](#-comprehensive-documentation)
-  - [Type-Safe Payloads (Generics)](#1-type-safe-payloads-generics)
-  - [Bulletproof Reliability & Recovery](#2-bulletproof-reliability--recovery)
-  - [Idempotency (Unique Jobs)](#3-idempotency-unique-jobs)
-  - [Scheduling & Exponential Backoff](#4-scheduling--exponential-backoff)
-  - [Observability & Hooks](#5-observability--hooks)
-  - [Testing (In-Memory Backend)](#6-testing-in-memory-backend)
-- [🏗️ Architecture](#️-architecture)
-- [📝 License](#-license)
-
-## ✨ Enterprise Features
-
-- **Strict Type Safety:** Fully powered by Generics (`Job[T]`). No more `map[string]any` type assertions or runtime panics.
-- **At-Least-Once Delivery Guarantees:** Utilizes Redis `BLMOVE` (Reliable Queue pattern) combined with a background Reaper to recover orphaned jobs if a worker crashes (OOM, SIGKILL).
-- **Idempotence Support:** Prevent duplicate jobs natively with atomic Redis `SETNX` locking.
-- **Advanced Scheduling:** First-class support for delayed jobs (`ZSET`) and granular retry policies including Exponential Backoff with Jitter to prevent Thundering Herd problems.
-- **Observability Built-in:** Middleware hooks (`BeforeProcess`, `AfterProcess`, `OnRetry`) for seamless integration with Prometheus, OpenTelemetry, and structured logging.
-- **CI/CD Ready:** Includes a thread-safe `MemoryQueueRepository` allowing you to run fast, deterministic unit tests without spinning up a Redis container.
+- **Pure Generics**: `Job[T]` type safety — zero type assertions, zero runtime panics
+- **At-Least-Once Delivery**: Reliable Queue pattern with automatic recovery from worker crashes
+- **Idempotency**: Built-in deduplication with atomic Redis locking
+- **Scheduling**: First-class support for delayed jobs, exponential backoff with jitter
+- **Observability**: Middleware hooks for Prometheus, OpenTelemetry, structured logging
+- **Testing Ready**: In-memory backend for fast, deterministic unit tests
+- **Transport Agnostic**: Pluggable repository interface for Redis, NATS, RabbitMQ, Kafka
 
 ## 📦 Installation
 
-Ensure you are using Go 1.18 or later.
+Ensure Go 1.18+:
 
 ```bash
-go get github.com/CMPNION/bull-mini
+go get github.com/CMPNION/queue-wrap
 ```
 
-*Prerequisite: A running instance of Redis 6.2+ (required for `BLMOVE` support).*
+**Prerequisites:**
+- Redis 6.2+ (for default Redis backend with `BLMOVE` support)
 
 ## 🚀 Quick Start
-
-A complete, production-ready example demonstrating queue initialization, job enqueuing, and worker processing with graceful shutdown.
 
 ```go
 package main
 
 import (
-	"context"
-	"fmt"
-	"log"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
+"context"
+"fmt"
+"log"
+"os"
+"os/signal"
+"syscall"
+"time"
 
-	"github.com/CMPNION/bull-mini/pkg/bullmini"
-	"github.com/redis/go-redis/v9"
+"github.com/CMPNION/queue-wrap/pkg/queuewrap"
+"github.com/redis/go-redis/v9"
 )
 
-// 1. Define your strict payload schema
 type OrderPayload struct {
-	OrderID   string `json:"order_id"`
-	UserEmail string `json:"user_email"`
+OrderID   string `json:"order_id"`
+UserEmail string `json:"user_email"`
 }
 
 func main() {
-	ctx := context.Background()
+ctx := context.Background()
 
-	redisOpts := &redis.Options{
-		Addr: "localhost:6379",
-	}
-
-	// 2. Initialize a strictly typed Queue
-	queue := bullmini.NewQueue[OrderPayload]("order-processing", redisOpts)
-
-	// 3. Enqueue a job with a retry policy
-	job, err := queue.Add(ctx, "process-payment", OrderPayload{
-		OrderID:   "ORD-778899",
-		UserEmail: "customer@example.com",
-	}, bullmini.WithExponentialBackoff(
-		1*time.Second,  // Initial delay
-		30*time.Second, // Max delay
-		2.0,            // Multiplier
-		true,           // Enable Jitter
-	))
-
-	if err != nil {
-		log.Fatalf("Failed to enqueue job: %v", err)
-	}
-	fmt.Printf("Enqueued job: %s\n", job.ID)
-
-	// 4. Define the Processor function
-	processor := func(ctx context.Context, j *bullmini.Job[OrderPayload]) error {
-		// Native type access - no casting required!
-		fmt.Printf("Processing order %s for %s\n", j.Data.OrderID, j.Data.UserEmail)
-		
-		// Simulate processing latency
-		time.Sleep(500 * time.Millisecond)
-		return nil 
-	}
-
-	// 5. Initialize the Worker with concurrency and timeouts
-	worker := bullmini.NewWorker[OrderPayload](
-		"order-processing", 
-		redisOpts, 
-		processor,
-		bullmini.WithConcurrency[OrderPayload](10),
-		bullmini.WithVisibilityTimeout[OrderPayload](5*time.Minute),
-	)
-
-	worker.Start(ctx)
-	fmt.Println("Worker is consuming jobs. Press Ctrl+C to exit.")
-
-	// Graceful shutdown orchestration
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	<-sigChan
-
-	fmt.Println("Shutting down worker gracefully...")
-	worker.Stop() // Blocks until active jobs finish
+redisOpts := &redis.Options{
+Addr: "localhost:6379",
 }
-```
 
-## 📚 Comprehensive Documentation
+// Create a queue
+queue := queuewrap.NewQueue[OrderPayload]("order-processing", redisOpts)
 
-### 1. Type-Safe Payloads (Generics)
+// Enqueue a job
+job, err := queue.Add(ctx, "process-payment", OrderPayload{
+OrderID:   "ORD-778899",
+UserEmail: "customer@example.com",
+}, queuewrap.WithExponentialBackoff(
+1*time.Second, 30*time.Second, 2.0, true,
+))
+if err != nil {
+log.Fatalf("Enqueue failed: %v", err)
+}
+fmt.Printf("Job enqueued: %s\n", job.ID)
 
-Every Queue and Worker requires a defined type parameter `[T any]`. The underlying Repository layer automatically serializes and deserializes this payload using Go's standard JSON encoder, ensuring data integrity across process boundaries.
+// Define processor
+processor := func(ctx context.Context, j *queuewrap.Job[OrderPayload]) error {
+fmt.Printf("Processing order %s for %s\n", j.Data.OrderID, j.Data.UserEmail)
+time.Sleep(500 * time.Millisecond)
+return nil
+}
 
-### 2. Bulletproof Reliability & Recovery
-
-Standard list-based queues (`BRPOP`) suffer from data loss if the worker dies post-retrieval. 
-
-`bull-mini` mitigates this via the **Reliable Queue** architecture:
-1. Jobs are atomically moved from the `wait` list to an `active:<worker_id>` list using `BLMOVE`.
-2. The Worker maintains a background heartbeat.
-3. If a worker crashes, the heartbeat expires. A background Reaper routine systematically sweeps for stale active lists and atomically restores orphaned jobs back to the `wait` queue based on the `VisibilityTimeout`.
-
-```go
-// Configure how long a job can remain active before being considered orphaned
-bullmini.WithVisibilityTimeout[MyPayload](10 * time.Minute)
-```
-
-### 3. Idempotency (Unique Jobs)
-
-Prevent duplicate processing (e.g., double-charging a credit card) by defining an Idempotency Key. `bull-mini` uses an atomic `SETNX` lock to guarantee uniqueness for 24 hours.
-
-```go
-job, err := queue.Add(ctx, "charge-card", payload, 
-	bullmini.WithIdempotencyKey("charge-req-uuid-1234"),
+// Start worker
+worker := queuewrap.NewWorker[OrderPayload](
+"order-processing",
+redisOpts,
+processor,
+queuewrap.WithConcurrency[OrderPayload](10),
+queuewrap.WithVisibilityTimeout[OrderPayload](5*time.Minute),
 )
 
-if err == bullmini.ErrDuplicateJob {
-	// Safely ignore or return 409 Conflict to the client
+worker.Start(ctx)
+fmt.Println("Worker started. Press Ctrl+C to exit.")
+
+sigChan := make(chan os.Signal, 1)
+signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+<-sigChan
+
+fmt.Println("Shutting down gracefully...")
+worker.Stop()
 }
 ```
 
-### 4. Scheduling & Exponential Backoff
+## 📚 Core Features
 
-Jobs can be scheduled for future execution or configured to back off dynamically upon failure. Delayed jobs are stored in a Redis `ZSET` and promoted to the active queue by the Worker's internal scheduler.
+### 1. Type Safety with Generics
+
+Every Queue and Worker is parameterized with your payload type `[T any]`. Serialization happens automatically—no manual type assertions needed.
 
 ```go
-// Delay execution by 15 minutes
-bullmini.WithDelay(15 * time.Minute)
-
-// Fixed retry backoff
-bullmini.WithBackoff(10 * time.Second)
-
-// Exponential Backoff with Thundering Herd protection (Jitter)
-bullmini.WithExponentialBackoff(initial, max, factor, true)
+queue := queuewrap.NewQueue[OrderPayload]("orders", redisOpts)
+job, err := queue.Add(ctx, "process", OrderPayload{...})
+// Type-safe: j.Data is OrderPayload, not map[string]interface{}
 ```
 
-### 5. Observability & Hooks
+### 2. Bulletproof Reliability
 
-Attach middleware-like hooks to monitor job lifecycles. Excellent for integrating with APM tools, emitting Prometheus metrics, or reporting errors to Sentry.
+Uses Redis **BLMOVE** (Reliable Queue pattern) + automatic Reaper to recover orphaned jobs:
+1. Jobs move from `wait` → `active:<worker_id>` atomically
+2. Worker maintains heartbeat (TTL-based)
+3. If worker crashes, Reaper sweeps stale active lists and restores jobs
 
 ```go
-hooks := bullmini.WorkerHooks[MyPayload]{
-	BeforeProcess: func(ctx context.Context, job *bullmini.Job[MyPayload]) {
-		metrics.IncActiveJobs(job.Name)
-	},
-	AfterProcess: func(ctx context.Context, job *bullmini.Job[MyPayload], err error) {
-		if err != nil {
-			metrics.IncFailedJobs(job.Name)
-		} else {
-			metrics.IncCompletedJobs(job.Name)
-		}
-	},
-	OnRetry: func(ctx context.Context, job *bullmini.Job[MyPayload], err error) {
-		logger.Warn("Job failed, scheduling retry", "attempt", job.Attempts, "err", err)
-	},
+queuewrap.WithVisibilityTimeout[Payload](10 * time.Minute)
+```
+
+### 3. Idempotency (Prevent Duplicates)
+
+Atomic Redis `SETNX` prevents duplicate processing for 24 hours:
+
+```go
+job, err := queue.Add(ctx, "charge-card", payload,
+queuewrap.WithIdempotencyKey("charge-req-uuid-1234"),
+)
+if err == queuewrap.ErrDuplicateJob {
+// Handle duplicate safely
+}
+```
+
+### 4. Scheduling & Backoff
+
+Delayed jobs stored in Redis `ZSET`, promoted by Worker scheduler:
+
+```go
+// Delay 15 minutes
+queuewrap.WithDelay(15 * time.Minute)
+
+// Fixed backoff on retry
+queuewrap.WithBackoff(10 * time.Second)
+
+// Exponential with jitter (prevents thundering herd)
+queuewrap.WithExponentialBackoff(initial, max, factor, true)
+```
+
+### 5. Observability Hooks
+
+Middleware-like hooks for APM, metrics, error tracking:
+
+```go
+hooks := queuewrap.WorkerHooks[MyPayload]{
+BeforeProcess: func(ctx context.Context, job *queuewrap.Job[MyPayload]) {
+metrics.IncActiveJobs(job.Name)
+},
+AfterProcess: func(ctx context.Context, job *queuewrap.Job[MyPayload], err error) {
+if err != nil {
+metrics.IncFailedJobs(job.Name)
+} else {
+metrics.IncCompletedJobs(job.Name)
+}
+},
+OnRetry: func(ctx context.Context, job *queuewrap.Job[MyPayload], err error) {
+logger.Warn("Retrying", "attempt", job.Attempts, "err", err)
+},
 }
 
-worker := bullmini.NewWorker[MyPayload](..., bullmini.WithHooks[MyPayload](hooks))
+worker := queuewrap.NewWorker[MyPayload](..., queuewrap.WithHooks[MyPayload](hooks))
 ```
 
-### 6. Testing (In-Memory Backend)
+### 6. Testing with In-Memory Backend
 
-Avoid brittle, slow integration tests that depend on Redis. `bull-mini` ships with a thread-safe, mutex-backed `MemoryQueueRepository` that fully complies with the `QueueRepository[T]` interface.
+Fast, deterministic unit tests without Redis:
 
 ```go
-// Inject the memory backend in your unit tests
-memRepo := bullmini.NewMemoryQueueRepository[MyPayload]()
+memRepo := queuewrap.NewMemoryQueueRepository[MyPayload]()
+queue := queuewrap.NewQueueWithRepo("test-queue", memRepo)
+worker := queuewrap.NewWorkerWithRepo("test-queue", memRepo, processor)
 
-// Initialize queue and worker against memory
-queue := bullmini.NewQueueWithRepo("test-queue", memRepo)
-worker := bullmini.NewWorkerWithRepo("test-queue", memRepo, mockProcessor)
-
-// Run deterministic, sub-millisecond tests...
+// Run tests...
 ```
 
 ## 🏗️ Architecture
 
-`bull-mini` adheres strictly to **Clean Architecture** to ensure the library is maintainable, extendable, and easily embeddable:
+**Clean Architecture** ensures maintainability and extensibility:
 
-- **`internal/domain`**: Business rules, state definitions, Interfaces (`QueueRepository`), and Generic structs (`Job[T]`). Completely agnostic of infrastructure.
-- **`internal/usecase`**: Application orchestration. Contains the `Queue` logic (ID generation, options parsing) and the `Worker` logic (Concurrency, Reapers, Schedulers, Heartbeats).
-- **`internal/infrastructure`**: Data persistence layer. Contains the concrete `RedisQueueRepository` (Lua scripts, Pipelines, `BLMOVE`) and the `MemoryQueueRepository` for testing.
-- **`pkg/bullmini`**: The unified, developer-friendly Facade API. Consumers only ever import this package.
+- **`internal/domain`**: Business rules, interfaces (`QueueRepository[T]`), entities (`Job[T]`)
+- **`internal/usecase`**: Application logic (Queue, Worker orchestration, Reaper, Heartbeat)
+- **`internal/infrastructure`**: Data persistence (Redis & Memory implementations)
+- **`pkg/queuewrap`**: Public Facade API (all consumers import this)
+
+### Pluggable Repository Pattern
+
+Extend with custom transports by implementing `QueueRepository[T]`:
+
+```go
+type QueueRepository[T any] interface {
+Enqueue(ctx context.Context, queueName string, job *Job[T]) error
+Dequeue(ctx context.Context, queueName, workerID string) (*Job[T], error)
+Update(ctx context.Context, queueName string, job *Job[T]) error
+GetJob(ctx context.Context, queueName, jobID string) (*Job[T], error)
+Acknowledge(ctx context.Context, queueName, workerID, jobID string) error
+PromoteDelayed(ctx context.Context, queueName string) error
+Heartbeat(ctx context.Context, queueName, workerID string, timeout time.Duration) error
+ReclaimStalled(ctx context.Context, queueName string, timeout time.Duration) error
+}
+```
+
+Implement for **NATS**, **RabbitMQ**, **Kafka** and swap seamlessly:
+
+```go
+// Example: NATS backend
+repo, _ := nats.NewNATSRepository[T](conn, "queuewrap")
+queue := queuewrap.NewQueueWithRepo("orders", repo)
+```
+
+## 🔧 Configuration
+
+### Job Options
+
+```go
+queuewrap.WithJobID("custom-id")                    // Custom job ID
+queuewrap.WithMaxAttempts(5)                        // Retry limit
+queuewrap.WithDelay(time.Minute)                    // Delayed execution
+queuewrap.WithBackoff(time.Minute)                  // Fixed backoff
+queuewrap.WithExponentialBackoff(i, m, f, true)    // Exponential + jitter
+queuewrap.WithIdempotencyKey("unique-key")          // Prevent duplicates
+```
+
+### Worker Options
+
+```go
+queuewrap.WithConcurrency[T](10)                           // Parallel jobs
+queuewrap.WithVisibilityTimeout[T](5 * time.Minute)        // Crash recovery window
+queuewrap.WithHooks[T](hooks)                              // Observability
+```
+
+## 📊 Comparison: Transport Backends
+
+| Aspect | Redis | NATS | RabbitMQ | Kafka |
+|--------|-------|------|----------|-------|
+| **Latency** | ~1ms | ~1ms | ~10ms | ~50ms |
+| **Throughput** | 100K msg/s | 100K msg/s | 1M msg/s | 10M+ msg/s |
+| **Push Model** | ✅ (BLMOVE) | ✅ (JetStream) | ✅ (Native) | ❌ (Pull) |
+| **Delayed Jobs** | ✅ (ZSET) | ✅ | ✅ | ⚠️ Complex |
+| **Recovery** | ✅ (Reaper) | ✅ | ✅ (DLQ) | ✅ |
+| **Setup Complexity** | Low | Low | Medium | High |
+| **Best For** | General purpose | Microservices | Enterprise | Real-time streams |
+
+## 🛡️ Production Checklist
+
+- [ ] Configure appropriate `VisibilityTimeout` based on job duration
+- [ ] Set `MaxAttempts` to balance retry vs failure
+- [ ] Use exponential backoff with jitter for high-concurrency scenarios
+- [ ] Attach observability hooks (metrics, logging, tracing)
+- [ ] Monitor worker heartbeats and stalled job metrics
+- [ ] Configure Redis persistence or replicate for durability
+- [ ] Use idempotency keys for payment/billing operations
+- [ ] Test graceful shutdown with `worker.Stop()`
+
+## 🚀 Performance Tips
+
+1. **Batch Processing**: Use higher concurrency for I/O-bound jobs
+2. **Job Serialization**: Keep payloads small (< 1MB recommended)
+3. **Backoff Strategy**: Start low (1s) and scale exponentially to avoid thundering herd
+4. **Memory Backend**: Use for tests, not production
+5. **Redis Persistence**: Enable AOF or RDB snapshots for durability
 
 ## 📝 License
 
-This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. 
+Licensed under **GPL-3.0**. See [LICENSE](LICENSE) for details.
 
-Permissions of this strong copyleft license are conditioned on making available complete source code of licensed works and modifications, which include larger works using a licensed work, under the same license. Copyright and license notices must be preserved. See the [LICENSE](LICENSE) file for more details.
+## 🤝 Contributing
+
+Contributions welcome! Please open issues and PRs.
+
+---
+
+**Future**: Native NATS, RabbitMQ, and Kafka transports coming soon.

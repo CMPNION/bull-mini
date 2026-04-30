@@ -8,7 +8,7 @@ import (
 
 	"time"
 
-	"github.com/CMPNION/bull-mini/internal/domain"
+	"github.com/CMPNION/queue-wrap/internal/domain"
 )
 
 type Queue[T any] struct {

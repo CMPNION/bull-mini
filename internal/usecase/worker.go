@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/CMPNION/bull-mini/internal/domain"
+	"github.com/CMPNION/queue-wrap/internal/domain"
 )
 
 type Processor[T any] func(ctx context.Context, job *domain.Job[T]) error

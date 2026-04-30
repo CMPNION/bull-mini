@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/CMPNION/bull-mini/internal/domain"
+	"github.com/CMPNION/queue-wrap/internal/domain"
 )
 
 type MemoryQueueRepository[T any] struct {

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/CMPNION/bull-mini/internal/domain"
+	"github.com/CMPNION/queue-wrap/internal/domain"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -28,7 +28,7 @@ type RedisQueueRepository[T any] struct {
 
 func NewRedisQueueRepository[T any](client *RedisClient, prefix string) *RedisQueueRepository[T] {
 	if prefix == "" {
-		prefix = "bullmini"
+		prefix = "queuewrap"
 	}
 	return &RedisQueueRepository[T]{
 		client:     client.Client,

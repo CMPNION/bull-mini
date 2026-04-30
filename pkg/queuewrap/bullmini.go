@@ -1,12 +1,12 @@
-package bullmini
+package queuewrap
 
 import (
 	"time"
 
-	"github.com/CMPNION/bull-mini/internal/domain"
-	"github.com/CMPNION/bull-mini/internal/infrastructure/memory"
-	"github.com/CMPNION/bull-mini/internal/infrastructure/redis"
-	"github.com/CMPNION/bull-mini/internal/usecase"
+	"github.com/CMPNION/queue-wrap/internal/domain"
+	"github.com/CMPNION/queue-wrap/internal/infrastructure/memory"
+	"github.com/CMPNION/queue-wrap/internal/infrastructure/redis"
+	"github.com/CMPNION/queue-wrap/internal/usecase"
 	redisclient "github.com/redis/go-redis/v9"
 )
 
@@ -28,13 +28,13 @@ var ErrDuplicateJob = domain.ErrDuplicateJob
 
 func NewQueue[T any](name string, redisOpts *redisclient.Options) *Queue[T] {
 	client := redis.NewRedisClient(redisOpts)
-	repo := redis.NewRedisQueueRepository[T](client, "bullmini")
+	repo := redis.NewRedisQueueRepository[T](client, "queuewrap")
 	return usecase.NewQueue[T](name, repo)
 }
 
 func NewWorker[T any](queueName string, redisOpts *redisclient.Options, processor Processor[T], opts ...WorkerOption[T]) *Worker[T] {
 	client := redis.NewRedisClient(redisOpts)
-	repo := redis.NewRedisQueueRepository[T](client, "bullmini")
+	repo := redis.NewRedisQueueRepository[T](client, "queuewrap")
 	return usecase.NewWorker[T](queueName, repo, processor, opts...)
 }
 

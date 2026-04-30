@@ -1,4 +1,4 @@
-module github.com/CMPNION/bull-mini
+module github.com/CMPNION/queue-wrap
 
 go 1.24.3
 
