@@ -1,3 +1,10 @@
+# 🎉Announce🎉
+In a few weeks I will drop a new release — and it will bring native NATS support to bull-mini.
+
+This means you’ll be able to plug NATS in as a transport layer for job distribution, unlock event-driven workflows, and scale your queues across services with much lower overhead and better decoupling.
+
+More details coming soon — including architecture notes, migration guide, and examples.
+
 # 🐂 bull-mini
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/CMPNION/bull-mini.svg)](https://pkg.go.dev/github.com/CMPNION/bull-mini)
